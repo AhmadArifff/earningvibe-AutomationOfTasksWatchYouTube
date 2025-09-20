@@ -1,4 +1,4 @@
-# app_fixed.py
+# app_full_fixed.py
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
@@ -11,7 +11,7 @@ import traceback
 # -------------- CONFIG --------------
 CHROME_OPTIONS = webdriver.ChromeOptions()
 CHROME_OPTIONS.add_argument("--start-maximized")
-CHROME_OPTIONS.add_argument("--force-device-scale-factor=0.67")  # set zoom 67%
+CHROME_OPTIONS.add_argument("--force-device-scale-factor=0.67")  # zoom 67%
 
 driver = webdriver.Chrome(options=CHROME_OPTIONS)
 wait = WebDriverWait(driver, 15)
@@ -22,15 +22,12 @@ actions = ActionChains(driver)
 def normalize(text: str) -> str:
     if text is None:
         return ""
-    # lower, remove non-alphanumeric (keuntungan: mendukung unicode letters too)
     return "".join(ch for ch in text.lower() if ch.isalnum())
 
 
 def find_visible_popup(max_wait=6):
-    """Cari popup dialog yang VISIBLE (return element atau None)."""
     deadline = time.time() + max_wait
     while time.time() < deadline:
-        # cari elemen dialog content yang biasa ada di popup
         candidates = driver.find_elements(By.CLASS_NAME, "MuiDialogContent-root")
         for c in candidates:
             try:
@@ -43,10 +40,7 @@ def find_visible_popup(max_wait=6):
 
 
 def get_label_text(label_el):
-    """Ambil teks label (prefer innerText dari span label typography), fallback input value."""
     try:
-        # coba ambil span khusus (banyak UI MUI menggunakan class 'MuiTypography-root' atau 'MuiFormControlLabel-label')
-        span = None
         try:
             span = label_el.find_element(By.XPATH, ".//span[contains(@class,'MuiFormControlLabel-label')]")
         except:
@@ -54,22 +48,17 @@ def get_label_text(label_el):
                 span = label_el.find_element(By.XPATH, ".//span[contains(@class,'MuiTypography-root')]")
             except:
                 span = None
-
         if span and span.is_displayed():
             txt = span.get_attribute("innerText") or span.text
             return txt.strip()
-    except Exception:
+    except:
         pass
-
-    # fallback: cari input radio dan ambil value
     try:
         inp = label_el.find_element(By.XPATH, ".//input[@type='radio']")
         val = inp.get_attribute("value")
         return (val or "").strip()
     except:
         pass
-
-    # last fallback: label.text
     try:
         return label_el.text.strip()
     except:
@@ -77,18 +66,14 @@ def get_label_text(label_el):
 
 
 def wait_for_submit_enabled_in_popup(popup_el, timeout=10):
-    """Tunggu sampai tombol submit di dalam popup aktif (enabled). Return button element or None."""
     end = time.time() + timeout
     submit_btn = None
     while time.time() < end:
         try:
             submit_btn = popup_el.find_element(By.XPATH, ".//button[normalize-space()='Submit' or contains(., 'Submit')]")
         except:
-            # kadang tombol belum dirender
             submit_btn = None
-
         if submit_btn:
-            # cek atribut disabled / aria-disabled / class
             disabled_attr = submit_btn.get_attribute("disabled")
             aria_disabled = submit_btn.get_attribute("aria-disabled")
             class_attr = submit_btn.get_attribute("class") or ""
@@ -96,72 +81,50 @@ def wait_for_submit_enabled_in_popup(popup_el, timeout=10):
             try:
                 is_enabled_api = submit_btn.is_enabled()
             except:
-                is_enabled_api = False
-
-            # Consider enabled if:
-            # - no "disabled" attribute and aria-disabled != 'true' and is_enabled_api True
+                pass
             if disabled_attr in (None, "false", "") and aria_disabled not in ("true", "True") and ("Mui-disabled" not in class_attr) and is_enabled_api:
                 return submit_btn
-            # else keep waiting
         time.sleep(0.4)
-    return submit_btn  # could be None or still disabled element
+    return submit_btn
 
 
 def click_element_with_retries(el):
-    """Coba klik element dengan beberapa metode. Return True if succeeded."""
-    # 1) try normal click
     try:
         el.click()
         return True, "click()"
-    except Exception as e:
-        err1 = e
-    # 2) scroll into view + JS click
+    except Exception:
+        pass
     try:
         driver.execute_script("arguments[0].scrollIntoView({block:'center', inline:'center'});", el)
         time.sleep(0.15)
-    except:
-        pass
-    try:
         driver.execute_script("arguments[0].click();", el)
         return True, "js-click"
-    except Exception as e:
-        err2 = e
-    # 3) Actions move and click
+    except Exception:
+        pass
     try:
         actions.move_to_element(el).pause(0.05).click(el).perform()
         return True, "actions-click"
-    except Exception as e:
-        err3 = e
-    # 4) send ENTER
+    except Exception:
+        pass
     try:
         el.send_keys("\n")
         return True, "enter"
-    except Exception as e:
-        err4 = e
-
-    # gagal semua
-    traceback.print_exc()
-    return False, f"errors: {err1} | {locals().get('err2')} | {locals().get('err3')} | {locals().get('err4')}"
+    except Exception:
+        pass
+    return False, "all click attempts failed"
 
 
 # -------------- CORE: handle popup --------------
 def handle_channel_popup(youtube_channel: str, popup_wait=6):
-    """Deteksi popup yang VISIBLE, ambil opsi, match dengan youtube_channel, pilih dan submit.
-       Returns True jika submit sukses (popup hilang), False jika tidak ada popup or gagal."""
     try:
-        # 1) tunggu popup VISIBLE (jika gak muncul dalam popup_wait detik -> skip)
         popup = find_visible_popup(max_wait=popup_wait)
         if not popup:
-            print("👌 Tidak ada popup channel (tidak muncul dalam timeout).")
+            print("👌 Tidak ada popup channel muncul.")
             return False
 
         print("💡 Popup konfirmasi channel muncul (visible).")
-
-        # 2) ambil label radio VISIBLE di dalam popup
         labels = popup.find_elements(By.XPATH, ".//label[contains(@class,'MuiFormControlLabel-root') or contains(@class,'MuiFormControlLabel')]")
-        # filter yg visible
         visible_labels = [l for l in labels if l.is_displayed()]
-        # fallback: kadang MUI tidak pakai label class, cari input langsung
         if not visible_labels:
             inputs = popup.find_elements(By.XPATH, ".//input[@type='radio']")
             visible_inputs = [i for i in inputs if i.is_displayed()]
@@ -169,45 +132,37 @@ def handle_channel_popup(youtube_channel: str, popup_wait=6):
             for inp in visible_inputs:
                 try:
                     lbl = inp.find_element(By.XPATH, "./ancestor::label")
-                    if lbl and lbl.is_displayed():
+                    if lbl.is_displayed():
                         visible_labels.append(lbl)
                 except:
-                    # can't get parent label
                     pass
-
         if not visible_labels:
-            print("❌ Tidak ada opsi radio yang terlihat di popup.")
-            # debugging: print innerHTML snippet
+            print("❌ Tidak ada opsi radio terlihat di popup.")
             try:
-                print("🔍 Snapshot popup (awal 300 char):")
-                print(popup.get_attribute("innerHTML")[:300])
+                print("🔍 Snapshot popup (awal 300 char):", popup.get_attribute("innerHTML")[:300])
             except:
                 pass
             return False
 
-        # 3) build list opsi (text, value) and print detail
         options = []
         for lbl in visible_labels:
             txt = get_label_text(lbl)
-            # juga cari input.value
             try:
                 inp = lbl.find_element(By.XPATH, ".//input[@type='radio']")
                 val = inp.get_attribute("value") or ""
             except:
                 val = ""
             options.append({"label_el": lbl, "text": txt, "value": val})
+
         print("📋 Opsi radio (visible) di popup:")
         for idx, o in enumerate(options, start=1):
             print(f"   {idx}. text='{o['text']}' | value='{o['value']}' | norm='{normalize(o['text'])}'")
 
-        # 4) prepare matching target string
         target_raw = youtube_channel or ""
-        # if starts with @, remove it (user requested)
         if target_raw.startswith("@"):
             target_raw = target_raw[1:]
         print(f"🔎 Cari match untuk: '{target_raw}'")
 
-        # build mapping normalized -> option
         norm_map = {}
         norm_list = []
         for o in options:
@@ -215,118 +170,74 @@ def handle_channel_popup(youtube_channel: str, popup_wait=6):
             norm_list.append(n)
             norm_map[n] = o
 
-        # fuzzy match on normalized strings
         matched_option = None
         if target_raw:
             target_norm = normalize(target_raw)
-            # get_close_matches works with original strings; use norm_list
             candidate_norms = get_close_matches(target_norm, norm_list, n=1, cutoff=0.35)
             if candidate_norms:
-                chosen_norm = candidate_norms[0]
-                matched_option = norm_map.get(chosen_norm)
-                print(f"✅ Channel cocok ditemukan (fuzzy): '{matched_option['text']}' (norm='{chosen_norm}')")
-            else:
-                print("❌ Tidak ada match fuzzy yang memuaskan. (mungkin channel berbeda eja)")
-        else:
-            print("⚠️ Tidak ada youtube_channel diberi (None).")
-
-        # 5) jika tidak match tapi ada opsi gejala -> pilih opsi pertama (optional)
+                matched_option = norm_map.get(candidate_norms[0])
+                print(f"✅ Channel cocok ditemukan (fuzzy): '{matched_option['text']}'")
         if matched_option is None and options:
-            # Kalau kamu mau agar tidak auto-pilih ketika tidak match, ubah kebijakan di sini.
-            # Sekarang kita pilih opsi pertama sebagai fallback (mirip behaviour lama).
             matched_option = options[0]
             print(f"⚠️ Fallback: memilih opsi pertama: '{matched_option['text']}'")
 
-        if not matched_option:
-            print("❌ Tidak ada opsi yang bisa dipilih. Skip.")
-            return False
-
-        # 6) klik opsi (klik pada label supaya event MUI tertangkap)
         lbl_el = matched_option["label_el"]
         try:
             driver.execute_script("arguments[0].scrollIntoView({block:'center'});", lbl_el)
-        except:
-            pass
-        time.sleep(0.12)
-        try:
+            time.sleep(0.12)
             driver.execute_script("arguments[0].click();", lbl_el)
-        except Exception:
+        except:
             try:
                 lbl_el.click()
-            except Exception:
+            except:
                 try:
                     actions.move_to_element(lbl_el).click().perform()
-                except Exception:
-                    print("⚠️ Gagal klik label opsi dengan metode biasa, coba klik input langsung.")
+                except:
                     try:
                         inp = lbl_el.find_element(By.XPATH, ".//input[@type='radio']")
                         driver.execute_script("arguments[0].click();", inp)
                     except:
                         pass
-
         print(f"☑️ Radio button '{matched_option['text']}' dicentang (attempt).")
 
-        # 7) tunggu submit enabled (cek berkala sampai timeout)
         submit_btn = wait_for_submit_enabled_in_popup(popup, timeout=10)
         if not submit_btn:
-            # ada kemungkinan tombol muncul tapi disabled attribute masih ada; coba tunggu sedikit lagi
-            print("⏳ Submit belum aktif dalam timeout awal. Menunggu tambahan 5 detik...")
             time.sleep(5)
             submit_btn = wait_for_submit_enabled_in_popup(popup, timeout=5)
-
         if not submit_btn:
-            # ambil tombol apa pun jika ada (walau disabled) supaya kita lihat statusnya
             try:
                 submit_btn = popup.find_element(By.XPATH, ".//button[normalize-space()='Submit' or contains(., 'Submit')]")
-                print("⚠️ Tombol Submit ditemukan tetapi tidak aktif. info:", {
-                    "disabled": submit_btn.get_attribute("disabled"),
-                    "aria-disabled": submit_btn.get_attribute("aria-disabled"),
-                    "class": submit_btn.get_attribute("class"),
-                    "is_enabled()": submit_btn.is_enabled(),
-                })
-            except Exception:
+            except:
                 submit_btn = None
-
         if not submit_btn:
             print("❌ Tidak menemukan tombol Submit di popup. Skip.")
             return False
 
-        # 8) coba klik submit dengan retries
         print(f"🔔 Status tombol sebelum klik: enabled={submit_btn.is_enabled()}, disabled_attr={submit_btn.get_attribute('disabled')}, aria-disabled={submit_btn.get_attribute('aria-disabled')}")
         success, method_info = click_element_with_retries(submit_btn)
-        if success:
-            print(f"📤 Submit berhasil via {method_info}")
-        else:
-            print(f"❌ Gagal klik Submit: {method_info}")
-            # sebagai langkah darurat, coba remove disabled attribute lalu JS click
+        if not success:
             try:
                 driver.execute_script("arguments[0].removeAttribute('disabled'); arguments[0].setAttribute('aria-disabled','false');", submit_btn)
                 time.sleep(0.12)
                 driver.execute_script("arguments[0].click();", submit_btn)
-                print("📤 Submit berhasil via removeAttribute + js-click (darurat).")
                 success = True
-            except Exception as e:
-                print("❌ Upaya paksa submit gagal juga:", e)
+                print("📤 Submit berhasil via removeAttribute + js-click (darurat).")
+            except:
                 success = False
 
-        # 9) jika klik berhasil -> tunggu popup hilang (stale/invisibility)
         if success:
             try:
-                # tunggu staleness (element removed or detached)
                 WebDriverWait(driver, 6).until(EC.staleness_of(popup))
                 print("✅ Popup konfirmasi tertutup, submit sukses!")
                 return True
             except:
-                # fallback: tunggu invisibility of locator
                 try:
                     WebDriverWait(driver, 4).until(EC.invisibility_of_element(popup))
                     print("✅ Popup konfirmasi tertutup (invisibility).")
                     return True
                 except:
-                    print("⚠️ Popup masih ada setelah klik. Mungkin submit tidak diproses server-side.")
-                    # print snapshot
+                    print("⚠️ Popup masih ada setelah klik.")
                     try:
-                        print("🔍 Isi popup (preview 400 char):")
                         print(popup.get_attribute("innerHTML")[:400], "...")
                     except:
                         pass
@@ -334,10 +245,25 @@ def handle_channel_popup(youtube_channel: str, popup_wait=6):
         else:
             return False
 
-    except Exception as main_e:
-        print("👌 Tidak ada popup channel atau terjadi exception di handle_channel_popup:")
+    except Exception:
         print(traceback.format_exc())
         return False
+
+
+def handle_channel_popup_with_retry(youtube_channel: str, max_attempts=5):
+    attempt = 1
+    while attempt <= max_attempts:
+        print(f"🔁 Attempt {attempt} untuk popup channel...")
+        success = handle_channel_popup(youtube_channel, popup_wait=6)
+        if success:
+            print(f"✅ Popup channel berhasil di-handle di attempt {attempt}")
+            return True
+        else:
+            print(f"⚠️ Popup masih ada / gagal submit. Retry {attempt+1}/{max_attempts}")
+            time.sleep(2)
+            attempt += 1
+    print(f"❌ Gagal handle popup channel setelah {max_attempts} attempt, skip task ini.")
+    return False
 
 
 # -------------- MAIN FLOW --------------
@@ -360,22 +286,17 @@ def login_and_navigate(email, password):
 
 
 def extract_channel_from_youtube_tab():
-    """Ambil channel name dari tab youtube (coba header, kalau tidak ada coba reel bar handle)."""
-    # This function assumes driver already switched to the youtube tab.
     last_channel_name = None
     try:
-        # Try header channel link (modern youtube)
         channel_el = WebDriverWait(driver, 8).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "#channel-name #text a"))
         )
         last_channel_name = channel_el.text.strip()
         print(f"📛 Nama channel terdeteksi (header): {last_channel_name}")
         return last_channel_name
-    except Exception:
+    except:
         pass
-
     try:
-        # fallback: reel bar handle (contains @). selector from your sample:
         channel_reel = WebDriverWait(driver, 6).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "yt-reel-channel-bar-view-model span a"))
         )
@@ -402,20 +323,12 @@ def process_page():
         try:
             print(f"\n▶️ Memulai tugas {i}...")
             last_channel_name = None
-
-            # LOOP submission task sampai habis
             while True:
                 try:
-                    submission_btn = card.find_element(
-                        By.XPATH,
-                        ".//button[.//span[contains(@class,'css-57i5t7')]]"
-                    )
+                    submission_btn = card.find_element(By.XPATH, ".//button[.//span[contains(@class,'css-57i5t7')]]")
                     submission_btn.click()
                     print("📝 Klik tombol submission task...")
-                    # jangan lupa tunggu video/cek waktu sesuai requirement (simulate)
                     time.sleep(20)
-
-                    # jika terbuka tab baru -> ambil channel name lalu close
                     if len(driver.window_handles) > 1:
                         driver.switch_to.window(driver.window_handles[-1])
                         print("📂 Tab YouTube terbuka...")
@@ -424,13 +337,11 @@ def process_page():
                         print("❌ Tab YouTube ditutup...")
                         driver.switch_to.window(driver.window_handles[0])
                     else:
-                        # no new tab -> maybe modal? just proceed
                         print("ℹ️ Tidak ada tab YouTube baru terbuka setelah klik submission.")
-                except Exception:
+                except:
                     print("✅ Semua submission task habis untuk card ini (no more submission button).")
                     break
 
-            # Setelah submission habis → klik collect reward
             try:
                 collect_btn = WebDriverWait(card, 10).until(
                     EC.element_to_be_clickable((By.XPATH, ".//button[.//span[contains(@class,'css-ulktgh')]]"))
@@ -440,15 +351,13 @@ def process_page():
                 collect_btn = all_buttons[-1]
             collect_btn.click()
             print("🏆 Klik tombol collect reward...")
-
-            # Setelah reward, cek popup dan handle
-            # beri sedikit jeda supaya popup merender di DOM
             time.sleep(0.8)
-            ok = handle_channel_popup(last_channel_name, popup_wait=6)
+
+            ok = handle_channel_popup_with_retry(last_channel_name, max_attempts=5)
             if ok:
-                print("✔️ Popup di-handle dan submit (atau tertutup).")
+                print("✔️ Popup di-handle dan submit sukses.")
             else:
-                print("ℹ️ Tidak ada popup / gagal handle popup (lanjutkan).")
+                print("❌ Popup gagal di-handle, lanjut task berikutnya.")
 
             print(f"✅ Tugas {i} selesai!")
             time.sleep(1.2)
@@ -457,16 +366,13 @@ def process_page():
             traceback.print_exc()
 
 
-# -------------- RUN --------------
 if __name__ == "__main__":
     try:
-        # login_and_navigate("aa2851214@gmail.com", "uSMnXd@AP4ByLhJ")
-        login_and_navigate("suapsaep1@gmail.com", "Suapsaep1")
+        login_and_navigate("aa2851214@gmail.com", "uSMnXd@AP4ByLhJ")
         page_num = 1
         while True:
             print(f"\n📄 Sedang proses halaman {page_num}...")
             process_page()
-            # next page
             try:
                 next_btn = WebDriverWait(driver, 5).until(
                     EC.element_to_be_clickable((By.XPATH, "//button[@aria-label='Go to next page']"))

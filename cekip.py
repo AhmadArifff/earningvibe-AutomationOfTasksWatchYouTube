@@ -10,7 +10,7 @@ from selenium.webdriver.support import expected_conditions as EC
 
 import time
 
-def get_ip_with_browser(proxy: str = None, headless: bool = False, timeout: int = 20):
+def get_ip_with_browser(idx,proxy: str = None, headless: bool = False, timeout: int = 20):
     """
     Buka whatismyipaddress.com (via Selenium), optionally lewat proxy,
     dan kembalikan dict {'ipv4': {'text':..., 'href':...}, 'ipv6': {...}}
@@ -94,22 +94,16 @@ def get_ip_with_browser(proxy: str = None, headless: bool = False, timeout: int 
                 result["ipv6"] = None
 
         # kecilkan kemungkinan halaman belum sepenuhnya render JS dengan delay singkat (opsional)
-        time.sleep(0.5)
+        time.sleep(3)
 
     finally:
         driver.quit()
 
     return result
 
-
 if __name__ == "__main__":
-    # contoh: tanpa proxy
-    res = get_ip_with_browser(proxy=None, headless=False, timeout=20)
-    print("Page title:", res["page_title"])
-    print("IPv4:", res["ipv4"])
-    print("IPv6:", res["ipv6"])
-
-    # contoh: dengan proxy (ganti proxy jika mau)
-    # proxy = "123.45.67.89:8080"
-    # res2 = get_ip_with_browser(proxy=proxy, headless=True)
-    # print("Via proxy -> IPv4:", res2["ipv4"])
+    for i in range(1, 4):   # coba 3 browser dulu
+        res = get_ip_with_browser(i,proxy=None, headless=False, timeout=20)
+        print("Page title:", res["page_title"])
+        print("IPv4:", res["ipv4"])
+        print("IPv6:", res["ipv6"])
