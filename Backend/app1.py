@@ -279,10 +279,30 @@ def login_and_navigate(email, password):
     login_btn.click()
     print("✅ Login berhasil, masuk ke dashboard...")
     time.sleep(3)
-    youtube_sidebar = wait.until(EC.element_to_be_clickable((By.XPATH, "//p[text()='Youtube']")))
-    youtube_sidebar.click()
-    print("📺 Sidebar YouTube diklik...")
-    time.sleep(2)
+
+    # Klik sidebar Youtube (expand)
+    try:
+        youtube_sidebar = wait.until(EC.element_to_be_clickable(
+            (By.XPATH, "//p[normalize-space()='Youtube'] | //h6[normalize-space()='Youtube']")
+        ))
+        click_element(youtube_sidebar, "sidebar Youtube")
+        print("📺 Sidebar YouTube diklik (expand)...")
+        time.sleep(1.5)
+    except Exception as e:
+        print("❌ Gagal klik sidebar Youtube:", e)
+
+    # Klik submenu View (lebih spesifik)
+    try:
+        view_submenu = wait.until(EC.element_to_be_clickable(
+            (By.XPATH, "//h6[normalize-space()='View'] | //p[normalize-space()='View']")
+        ))
+        click_element(view_submenu, "submenu View")
+        print("👁️ Submenu 'View' YouTube diklik...")
+        time.sleep(2)
+    except Exception as e:
+        print("⚠️ Tidak ada submenu 'View' atau gagal klik:", e)
+
+
 
 
 def extract_channel_from_youtube_tab():
@@ -373,7 +393,121 @@ def fetch_profile_info():
     else:
         print("⚠️ Gagal ambil Gmail / Balance")
         return None, None
+# filter_600 
+# def process_page():
+#     cards = driver.find_elements(
+#         By.XPATH,
+#         "//div[contains(@class,'MuiCard-root')]//img[@src='/svg/youtube-icon.svg']/ancestor::div[contains(@class,'MuiCard-root')]"
+#     )
+#     print(f"🔍 Ditemukan {len(cards)} tugas YouTube di halaman ini")
 
+#     # Ambil nilai dari semua card
+#     card_values = []
+#     for card in cards:
+#         try:
+#             value_el = card.find_element(By.XPATH, ".//div[contains(@class,'MuiBox-root') and contains(text(),'$')]")
+#             value_text = value_el.text.strip()
+#             card_values.append(value_text)
+#         except Exception as e:
+#             print(f"⚠️ Gagal mengambil nilai card: {e}")
+#             card_values.append(None)
+
+#     print(f"💰 Nilai card di halaman ini: {card_values}")
+
+#     # Jika semua card bernilai $0.000600, restart browser dan login kembali
+#     if all(value == "$0.000600" for value in card_values if value is not None):
+#         print("⚠️ Semua card bernilai $0.000600. Restart browser dan login kembali...")
+#         restart_browser_and_login("suapsaep1@gmail.com", "Suapsaep1")
+
+#         # Periksa ulang setelah restart
+#         cards_after_restart = driver.find_elements(
+#             By.XPATH,
+#             "//div[contains(@class,'MuiCard-root')]//img[@src='/svg/youtube-icon.svg']/ancestor::div[contains(@class,'MuiCard-root')]"
+#         )
+#         card_values_after_restart = []
+#         for card in cards_after_restart:
+#             try:
+#                 value_el = card.find_element(By.XPATH, ".//div[contains(@class,'MuiBox-root') and contains(text(),'$')]")
+#                 value_text = value_el.text.strip()
+#                 card_values_after_restart.append(value_text)
+#             except Exception as e:
+#                 print(f"⚠️ Gagal mengambil nilai card setelah restart: {e}")
+#                 card_values_after_restart.append(None)
+
+#         print(f"💰 Nilai card setelah restart: {card_values_after_restart}")
+
+#         # Jika setelah restart tetap $0.000600, lanjutkan proses
+#         if all(value == "$0.000600" for value in card_values_after_restart if value is not None):
+#             print("⚠️ Nilai tetap $0.000600 setelah restart. Lanjutkan proses...")
+#         else:
+#             print("✅ Nilai card berubah setelah restart. Melanjutkan proses...")
+
+#     # Ambil info Gmail dan Balance sekali sebelum proses semua card
+#     email, balance = fetch_profile_info()
+
+#     for i, card in enumerate(cards, start=1):
+#         email, balance = fetch_profile_info()
+#         try:
+#             print(f"\n▶️ Memulai tugas {i}...")
+#             last_channel_name = None
+#             # Klik submission task
+#             while True:
+#                 try:
+#                     submission_btn = card.find_element(By.XPATH, ".//button[.//span[contains(@class,'css-57i5t7')]]")
+#                     click_element(submission_btn, "submission button")  # pakai fallback klik
+#                     print("📝 Klik tombol submission task...")
+#                     time.sleep(10)
+#                     if len(driver.window_handles) > 1:
+#                         driver.switch_to.window(driver.window_handles[-1])
+#                         print("📂 Tab YouTube terbuka...")
+#                         last_channel_name = extract_channel_from_youtube_tab()
+#                         driver.close()
+#                         print("❌ Tab YouTube ditutup...")
+#                         driver.switch_to.window(driver.window_handles[0])
+#                     else:
+#                         print("ℹ️ Tidak ada tab YouTube baru terbuka setelah klik submission.")
+#                 except:
+#                     print("✅ Semua submission task habis untuk card ini (no more submission button).")
+#                     break
+
+#             # Klik tombol collect reward
+#             try:
+#                 collect_btn = WebDriverWait(card, 10).until(
+#                     EC.presence_of_element_located((By.XPATH, ".//button[.//span[contains(@class,'css-ulktgh')]]"))
+#                 )
+#             except Exception:
+#                 all_buttons = card.find_elements(By.XPATH, ".//button")
+#                 collect_btn = all_buttons[-1] if all_buttons else None
+
+#             if collect_btn:
+#                 # tunggu backdrop hilang sebelum klik
+#                 try:
+#                     WebDriverWait(driver, 2).until(
+#                         EC.invisibility_of_element_located((By.CSS_SELECTOR, "div.MuiBackdrop-root"))
+#                     )
+#                 except:
+#                     pass
+#                 click_element(collect_btn, "collect button")  # pakai fallback klik
+#                 print("🏆 Klik tombol collect reward...")
+#                 time.sleep(0.8)
+#             else:
+#                 print("⚠️ Tombol collect reward tidak ditemukan!")
+
+#             # Handle popup channel
+#             ok = handle_channel_popup_with_retry(last_channel_name, max_attempts=2)
+#             if ok:
+#                 print("✔️ Popup di-handle dan submit sukses.")
+#             else:
+#                 print("❌ Popup gagal di-handle, lanjut task berikutnya.")
+
+#             print(f"✅ Tugas {i} selesai!")
+#             time.sleep(1.2)
+#         except Exception as e:
+#             print(f"⚠️ Error di tugas {i}:", e)
+#             traceback.print_exc()
+
+
+# not filter 600
 def process_page():
     cards = driver.find_elements(
         By.XPATH,
@@ -445,17 +579,36 @@ def process_page():
             print(f"⚠️ Error di tugas {i}:", e)
             traceback.print_exc()
 
-
+def wait_for_cards(timeout=10):
+    # Tunggu sampai minimal 1 card YouTube muncul di halaman
+    try:
+        WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((
+                By.XPATH,
+                "//div[contains(@class,'MuiCard-root')]//img[@src='/svg/youtube-icon.svg']/ancestor::div[contains(@class,'MuiCard-root')]"
+            ))
+        )
+    except Exception:
+        print("⚠️ Tidak menemukan card YouTube setelah next page (timeout).")
+        
+        
+def restart_browser_and_login(email, password):
+    global driver, wait, actions
+    print("🔄 Restarting browser...")
+    driver.quit()
+    driver = webdriver.Chrome(options=CHROME_OPTIONS)
+    wait = WebDriverWait(driver, 15)
+    actions = ActionChains(driver)
+    login_and_navigate(email, password)
 
 # -------------- RUN --------------
 if __name__ == "__main__":
     try:
         # login_and_navigate("example@gmail.com", "examplepassword")
-        login_and_navigate("aa2851214@gmail.com", "uSMnXd@AP4ByLhJ")
-        # login_and_navigate("suapsaep1@gmail.com", "Suapsaep1")
         page_num = 1
         while True:
             print(f"\n📄 Sedang proses halaman {page_num}...")
+            wait_for_cards(timeout=12)  # <-- Tambahkan ini!
             process_page()
             try:
                 # tunggu backdrop hilang dulu
